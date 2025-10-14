@@ -18,34 +18,45 @@ def plot_contours(contours):
     fig, ax = plt.subplots(figsize=(8 / 1.2, 5 / 1.2))
     for contour in contours:
         contour = contour.squeeze(axis=1)  # Remove unnecessary axis
-        plt.plot(contour[:, 0], contour[:, 1], linewidth=2)  # Plot each contour
+        ax.plot(contour[:, 0], contour[:, 1], linewidth=0.2)  # Plot each contour
     ax.set_xlabel(r'$x$ (px)')
     ax.set_ylabel(r'$y$ (px)')
     ax.set_aspect('equal')  # Ensure equal scaling on both axes
     fig.tight_layout()
     plt.savefig('images/pdf/wall_contours.pdf')
-    plt.show()
+    plt.savefig('images/pdf/wall_contours.png', dpi=1000)
+    # Save a version with no colors and no axes
+    fig2, ax2 = plt.subplots(figsize=(8 / 1.2, 5 / 1.2))
+    for contour in contours:
+        contour = contour.squeeze(axis=1)
+        ax2.plot(contour[:, 0], contour[:, 1], color='black', linewidth=0.2)
+    ax2.set_aspect('equal')
+    ax2.axis('off')
+    fig2.tight_layout(pad=0)
+    plt.savefig('images/pdf/wall_contours_noaxes.png', dpi=1000, bbox_inches='tight', pad_inches=0)
+    plt.close(fig2)
 
 
 # Corrected for Article
 def plot_binary_image(binary_image):
     set_plot_style()
     fig, ax = plt.subplots(figsize=(8 / 1.2, 5 / 1.2))
-    ax.imshow(binary_image, cmap='gray', origin='lower')
+        # ax.imshow(binary_image, cmap='gray', origin='lower')
     ax.set_xlabel(r'$x$ (px)')
     ax.set_ylabel(r'$y$ (px)')
     fig.tight_layout()
     plt.savefig('images/pdf/wall_mask.pdf')
-    plt.show()
+    plt.savefig('images/pdf/wall_mask.png')
+        # plt.show()
 
 
 def plot_histogram(grid_full, x_values_full, y_values_full):
     plt.imshow(grid_full, origin='lower',
-               extent=[x_values_full[0], x_values_full[-1], y_values_full[0], y_values_full[-1]], cmap='viridis')
+                extent=[x_values_full[0], x_values_full[-1], y_values_full[0], y_values_full[-1]], cmap='viridis')
     plt.colorbar(label='Density')
     plt.xlabel('X Coordinate')
     plt.ylabel('Y Coordinate')
-    plt.show()
+    # plt.show()
 
 
 def plot_segments(segments, color='blue', label=None):
@@ -57,7 +68,7 @@ def plot_segments(segments, color='blue', label=None):
     plt.ylabel('Y Coordinate')
     plt.title('Plot of Segments')
     plt.grid(True)
-    plt.show()
+        # plt.show()
 
 
 def plot_segments_with_random_colors(segments, name=None):
@@ -77,7 +88,7 @@ def plot_segments_with_random_colors(segments, name=None):
 
     fig.tight_layout()
     plt.savefig(f'images/pdf/{name}.pdf')
-    plt.show()
+        # plt.show()
 
 
 def plot_2d_wall_groups(wall_groups, rotated_wall_groups, rotated_wall_axes, original_wall_axes):
@@ -123,7 +134,7 @@ def plot_2d_wall_groups(wall_groups, rotated_wall_groups, rotated_wall_axes, ori
     plt.legend()
     plt.grid(True)
     plt.title('2D Plot of Wall Groups')
-    plt.show()
+        # plt.show()
 
 
 def plot_threshold_and_filtered_points(threshold, wall_group, filtered_wall_points):
@@ -146,7 +157,7 @@ def plot_threshold_and_filtered_points(threshold, wall_group, filtered_wall_poin
     plt.grid(True)
 
     # Show plot
-    plt.show()
+        # plt.show()
 
 
 def plot_histogram_with_threshold(hist, height_threshold):
@@ -165,10 +176,10 @@ def plot_histogram_with_threshold(hist, height_threshold):
     plt.legend()
 
     # Zobrazení grafu
-    plt.show()
+        # plt.show()
 
 
-def plot_smoothed_contour(original_polygon, smoothed_polygon):
+def plot_smoothed_contour(original_polygon, smoothed_polygon, hull_id=None):
     set_plot_style()
 
     fig, ax = plt.subplots(figsize=(8/1.2, 5/1.2))
@@ -226,6 +237,27 @@ def plot_smoothed_contour(original_polygon, smoothed_polygon):
     mark_inset(ax, axins, loc1=2, loc2=3, fc="none", ec="0.5")
 
     plt.savefig('images/pdf/slab_contour_smoothing.pdf')
+    # Save original polygon only
+    fig2, ax2 = plt.subplots(figsize=(8/1.2, 5/1.2))
+    xy = original_polygon.get_xy()
+    ax2.plot(xy[:, 0], xy[:, 1], color='black', linewidth=0.5)
+    ax2.set_aspect('equal', 'box')
+    ax2.axis('off')
+    fig2.tight_layout(pad=0)
+    fname_orig = f'images/pdf/hull_{hull_id}.png' if hull_id is not None else 'images/pdf/slab_contour_original.png'
+    plt.savefig(fname_orig, dpi=1000, bbox_inches='tight', pad_inches=0)
+    plt.close(fig2)
+
+    # Save smoothed polygon only
+    fig3, ax3 = plt.subplots(figsize=(8/1.2, 5/1.2))
+    xy_smooth = smoothed_polygon.get_xy()
+    ax3.plot(xy_smooth[:, 0], xy_smooth[:, 1], color='black', linewidth=0.5)
+    ax3.set_aspect('equal', 'box')
+    ax3.axis('off')
+    fig3.tight_layout(pad=0)
+    fname_smooth = f'images/pdf/hull_{hull_id}_smoothed.png' if hull_id is not None else 'images/pdf/slab_contour_smoothed.png'
+    plt.savefig(fname_smooth, dpi=1000, bbox_inches='tight', pad_inches=0)
+    plt.close(fig3)
     plt.show()
 
 
@@ -339,27 +371,27 @@ def plot_2d_histogram(mask, x_edges, y_edges):
     set_plot_style()
     fig = plt.figure(figsize=(8/1.2, 6/1.2))
     plt.imshow(mask, extent=[x_edges.min(), x_edges.max(), y_edges.min(), y_edges.max()], cmap='jet',
-               origin='lower')
+        origin='lower')
     plt.colorbar(label='Relative point cloud density', shrink=0.63)
     plt.xlabel(r'$x$ (m)')
     plt.ylabel(r'$y$ (m)')
     plt.grid(False)
     fig.tight_layout()
     fig.savefig('images/pdf/2d_histogram.pdf', bbox_inches='tight')
-    fig.show()
+        # fig.show()
 
 
 def plot_shifted_mask(shifted_mask, x_edges, y_edges):
     set_plot_style()
     plt.figure(figsize=(8/1.2, 6/1.2))
     plt.imshow(shifted_mask, extent=[x_edges.min(), x_edges.max(), y_edges.min(), y_edges.max()], cmap='binary',
-               origin='lower')
+        origin='lower')
     plt.xlabel(r'$x$ (m)')
     plt.ylabel(r'$y$ (m)')
     plt.title('Binarized mask - shifted')
     plt.grid(False)
     plt.savefig('images/pdf/slab_mask_binarized.pdf')
-    plt.show()
+        # plt.show()
 
 
 def plot_wall(wall_points, thickness, wall_number):

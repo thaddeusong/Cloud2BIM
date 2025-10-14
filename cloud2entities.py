@@ -76,15 +76,22 @@ for xyz_filename in xyz_filenames:
 points_xyz = np.round(points_xyz, 3)  # round the xyz coordinates to 3 decimals
 last_time = log('All point cloud data imported.', last_time, log_filename)
 
+
 # SECTION: Segment Slabs and Split the Point Cloud to Storeys
 print("-" * 50)
 print("Slab segmentation")
 print("-" * 50)
 # scan the model along the z-coordinate and search for planes parallel to xy-plane
+# Save slab segmentation plot
+import matplotlib.pyplot as plt
 slabs, horizontal_surface_planes = identify_slabs(points_xyz, points_rgb, bfs_thickness,
                                                   tfs_thickness, z_step=0.15,
                                                   pc_resolution=pc_resolution,
-                                                  plot_segmented_plane=False)  # plot with open 3D
+                                                  plot_segmented_plane=False)  # disable pop-up plot
+if plt.get_fignums():
+    plt.savefig(f"images/slab_segmentation.png")
+    plt.close()
+
 
 # SECTION: Segment Walls and Classify Openings
 print("-" * 50)
@@ -93,7 +100,10 @@ print("-" * 50)
 
 # merge_horizontal_pointclouds_in_storey(horizontal_surface_planes)
 point_cloud_storeys = split_pointcloud_to_storeys(points_xyz, slabs)
-# display_cross_section_plot(point_cloud_storeys, slabs)
+# Save cross-section plot if generated
+if plt.get_fignums():
+    plt.savefig(f"images/cross_section_storeys.png")
+    plt.close()
 walls, all_openings, zones = [], [], []
 wall_id = 0
 for i, storey_pointcloud in enumerate(point_cloud_storeys):
@@ -168,12 +178,33 @@ for i, storey_pointcloud in enumerate(point_cloud_storeys):
         for (x_start, x_end), (z_min, z_max), opening_type in zip(opening_widths, opening_heights, opening_types):
             print(
                 f"Opening ({opening_type:s}): X-Range: {x_start:.2f} to {x_end:.2f}, Z-Range: {z_min:.2f} to {z_max:.2f}")
+
+        # --- Save 2D XY projection image for wall openings ---
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(6, 6))
+        # Project wall points to XY and plot
+        wall_points = np.array(translated_filtered_rotated_wall_groups[j])
+        if wall_points.size > 0 and wall_points.ndim == 2 and wall_points.shape[1] >= 2:
+            plt.scatter(wall_points[:, 0], wall_points[:, 1], s=0.5, c='black')
+        # Optionally, plot opening ranges as colored rectangles
+        for (x_start, x_end), (z_min, z_max), opening_type in zip(opening_widths, opening_heights, opening_types):
+            color = 'blue' if opening_type == 'window' else 'red' if opening_type == 'door' else 'gray'
+            plt.fill_betweenx([z_min, z_max], x_start, x_end, color=color, alpha=0.3)
+        plt.axis('off')
+        plt.grid(False)
+        plt.tight_layout(pad=0)
+        plt.savefig(f"images/wall_outputs_images/wall_{i+1}_{j+1}_openings.png", bbox_inches='tight', pad_inches=0)
+        plt.close()
         print("-" * 50)
 
     # SECTION: Split the Storeys to Zones (Spaces in the IFC)
     print('Segmenting the storey to zones (spaces)...')
     print("-" * 50)
     zones_in_storey = identify_zones(walls, snapping_distance=0.8, plot_zones=False)
+    # Save zone segmentation plot if generated
+    if plt.get_fignums():
+        plt.savefig(f"images/zones_storey_{i+1}.png")
+        plt.close()
     zones.append(zones_in_storey)
 
 # SECTION: Generate IFC

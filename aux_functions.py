@@ -1,3 +1,4 @@
+
 import os
 import sys
 import time
@@ -13,6 +14,7 @@ from scipy.signal import find_peaks
 from skimage.morphology import closing, footprint_rectangle
 import open3d as o3d
 import e57
+import laspy
 from tqdm import tqdm
 from plotting_functions import *
 
@@ -155,20 +157,43 @@ def load_selective_lines(filename, step):
     with open(filename, 'r') as file:
         # Skip the first line
         next(file)
-        lines = (line.strip().split('\t') for line in islice(file, 0, None, step))
+        lines = (line.strip().split() for line in islice(file, 0, None, step))  # split by any whitespace
         return [[float(element) for element in line] for line in lines]
 
 
+
 def load_xyz_file(file_name, plot_xyz=False, select_ith_lines=True, ith_lines=20):
-    if select_ith_lines:
-        pcd = np.array(load_selective_lines(file_name, ith_lines))
-        xyz = pcd[1:, :3]
-        rgb = pcd[1:, 3:6]
+    ext = os.path.splitext(file_name)[1].lower()
+    if ext == '.las':
+        # Read LAS file using laspy
+        las = laspy.read(file_name)
+        xyz = np.vstack((las.x, las.y, las.z)).T
+        # Check if color is available
+        if hasattr(las, 'red') and hasattr(las, 'green') and hasattr(las, 'blue'):
+            rgb = np.vstack((las.red, las.green, las.blue)).T
+            # Normalize if needed (LAS color is usually 0-65535)
+            if rgb.max() > 255:
+                rgb = (rgb / 256).astype(np.uint8)
+        else:
+            rgb = np.zeros_like(xyz)
+        print(f'LAS file loaded: {file_name} with {len(xyz)} points.')
     else:
-        pcd = np.loadtxt(file_name, skiprows=1)
-        xyz = pcd[:, :3]
-        rgb = pcd[:, 3:6]
-    print('Point cloud consisting of %d points loaded.' % len(xyz))
+        if select_ith_lines:
+            pcd = np.array(load_selective_lines(file_name, ith_lines))
+            xyz = pcd[1:, :3]
+            rgb = pcd[1:, 3:6]
+        else:
+            # Try utf-8 encoding, fallback to default if fails
+            try:
+                pcd = np.loadtxt(file_name, skiprows=1, encoding='utf-8')
+            except TypeError:
+                # For numpy < 1.23, encoding argument is not available
+                with open(file_name, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()[1:]
+                pcd = np.array([list(map(float, line.strip().split())) for line in lines])
+            xyz = pcd[:, :3]
+            rgb = pcd[:, 3:6]
+        print('Point cloud consisting of %d points loaded.' % len(xyz))
 
     # show plot of xyz points from top view: (x, y) coordinates and with rgb-colored points
     if plot_xyz:
@@ -177,7 +202,6 @@ def load_xyz_file(file_name, plot_xyz=False, select_ith_lines=True, ith_lines=20
         plt.title("Top-View")
         plt.xlabel('X-axis (m)')
         plt.ylabel('Y-axis (m)')
-        plt.show()
     return xyz, rgb
 
 
@@ -205,7 +229,7 @@ def smooth_contour(x_contour, y_contour, epsilon):
 
 
 def create_hull_from_histogram(points_3d, pointcloud_resolution, grid_coefficient, plot_graphics,
-                               dilation_meters, erosion_meters):
+                               dilation_meters, erosion_meters, hull_id=None):
     # Project 3D points to 2D
     points_2d = np.array([[x, y] for x, y, _ in points_3d])
 
@@ -262,7 +286,7 @@ def create_hull_from_histogram(points_3d, pointcloud_resolution, grid_coefficien
                                                                                epsilon=smoothing_factor)
     polygon_smoothed = Polygon(simplified_points, fill=None, edgecolor='red')
     if plot_graphics:
-        plot_smoothed_contour(polygon, polygon_smoothed)
+        plot_smoothed_contour(polygon, polygon_smoothed, hull_id=hull_id)
 
     return x_contour_smoothed, y_contour_smoothed, polygon_smoothed
 
@@ -287,7 +311,6 @@ def identify_slabs(points_xyz, points_rgb, bottom_floor_slab_thickness, top_floo
         plt.plot([max_n_points_array / 1000, max_n_points_array / 1000], [min(z_array), max(z_array)], '--b', linewidth=1.0)
         plt.ylabel(r'Height/z-coordinate (m)')
         plt.xlabel(r'Number of points ($\times 10^3$)')
-        plt.show()
 
     # extract z-coordinates where the density of points (indicated by a high value on the histogram) exceeds 50%
     # of a maximum -> horiz_surface candidates
@@ -335,7 +358,7 @@ def identify_slabs(points_xyz, points_rgb, bottom_floor_slab_thickness, top_floo
             slab_bottom_z_coord = slab_top_z_coord - bottom_floor_slab_thickness
             x_coords, y_coords, polygon = create_hull_from_histogram(horiz_surface_planes[i], pc_resolution,
                                                                      grid_coefficient=5, plot_graphics=True,
-                                                                     dilation_meters=1.0, erosion_meters=1.0)
+                                                                     dilation_meters=1.0, erosion_meters=1.0, hull_id=i)
             slabs.append({'polygon': polygon, 'polygon_x_coords': x_coords, 'polygon_y_coords': y_coords,
                           'slab_bottom_z_coord': slab_bottom_z_coord, 'thickness': bottom_floor_slab_thickness})
             print('Slab no. %d: bottom (z-coordinate) = %.3f m, thickness = %0.1f mm'
@@ -351,7 +374,7 @@ def identify_slabs(points_xyz, points_rgb, bottom_floor_slab_thickness, top_floo
             # create hull for the slab
             x_coords, y_coords, polygon = create_hull_from_histogram(slab_points, pc_resolution,
                                                                      grid_coefficient=5, plot_graphics=True,
-                                                                     dilation_meters=1.5, erosion_meters=1.5)
+                                                                     dilation_meters=1.5, erosion_meters=1.5, hull_id=i)
             slabs.append({'polygon': polygon, 'polygon_x_coords': x_coords, 'polygon_y_coords': y_coords,
                           'slab_bottom_z_coord': slab_bottom_z_coord, 'thickness': slab_thickness})
             print('Slab no. %d: bottom (z-coordinate) = %.3f m, thickness = %0.1f mm'
@@ -364,7 +387,7 @@ def identify_slabs(points_xyz, points_rgb, bottom_floor_slab_thickness, top_floo
             # create hull for the slab
             x_coords, y_coords, polygon = create_hull_from_histogram(horiz_surface_planes[i], pc_resolution,
                                                                      grid_coefficient=5, plot_graphics=True,
-                                                                     dilation_meters=1.5, erosion_meters=1.5)
+                                                                     dilation_meters=1.5, erosion_meters=1.5, hull_id=i)
             slabs.append({'polygon': polygon, 'polygon_x_coords': x_coords, 'polygon_y_coords': y_coords,
                           'slab_bottom_z_coord': slab_bottom_z_coord, 'thickness': top_floor_ceiling_thickness})
             print('Slab no. %d: bottom (z-coordinate) = %.3f m, thickness = %0.1f mm'
@@ -450,7 +473,6 @@ def display_cross_section_plot(segmented_pointclouds_3d, slabs):
     plt.legend('Cross Section')
     plt.grid(False)
     plt.axis('equal')
-    plt.show()
 
 
 def save_coordinates_to_xyz(coordinates_list, base_filename):
@@ -787,6 +809,11 @@ def calculate_wall_axis(group):
 
 def line_intersection(line1, line2):
     """Find the intersection point of two lines (if it exists)."""
+    # Check for NaN or infinite values before subtraction
+    import numpy as np
+    for pt in [line1[0], line1[1], line2[0], line2[1]]:
+        if not all(np.isfinite(coord) for coord in pt):
+            return None
     xdiff = (line1[0][0] - line1[1][0], line2[0][0] - line2[1][0])
     ydiff = (line1[0][1] - line1[1][1], line2[0][1] - line2[1][1])
 
@@ -996,7 +1023,13 @@ def identify_walls(pointcloud, pointcloud_resolution, minimum_wall_length, minim
     wall_materials = ['Concrete'] * len(parallel_groups)
 
     # Calculate direction vectors for each wall axis
-    wall_directions = [(axis[1][0] - axis[0][0], axis[1][1] - axis[0][1]) for axis in wall_axes]
+    wall_directions = []
+    for axis in wall_axes:
+        if (np.isfinite(axis[0][0]) and np.isfinite(axis[1][0]) and
+            np.isfinite(axis[0][1]) and np.isfinite(axis[1][1])):
+            wall_directions.append((axis[1][0] - axis[0][0], axis[1][1] - axis[0][1]))
+        else:
+            wall_directions.append((0.0, 0.0))  # or skip, depending on desired behavior
 
     # Assign points to walls
     wall_groups, wall_thicknesses = assign_points_to_walls(x_coords, y_coords, z_coords, wall_axes, parallel_groups,
@@ -1087,9 +1120,9 @@ def identify_floor_and_ceiling(points, point_cloud_resolution, min_distance=2, p
         plt.ylabel('Frequency')
         plt.legend()
         # plt.title('z-coordinate histogram with floor and ceiling peaks')
-        plt.savefig('images/wall_outputs_images/identified_floor_and_ceiling_surfaces.jpg', dpi=300)
-        plt.savefig('images/wall_outputs_images/identified_floor_and_ceiling_surfaces.pdf')
-        plt.show()
+    plt.savefig('images/wall_outputs_images/identified_floor_and_ceiling_surfaces.jpg', dpi=300)
+    plt.savefig('images/wall_outputs_images/identified_floor_and_ceiling_surfaces.pdf')
+    plt.savefig('images/wall_outputs_images/identified_floor_and_ceiling_surfaces.png', dpi=300)
 
     return z_floor, z_ceiling
 
@@ -1155,9 +1188,9 @@ def identify_wall_faces(wall_number, points, wall_label, point_cloud_resolution,
         plt.ylabel('Frequency')
         plt.legend()
         # plt.title('y-coordinate histogram with wall faces peaks')
-        plt.savefig('images/wall_outputs_images/identified_wall_faces_%d.jpg' % wall_number, dpi=300)
-        plt.savefig('images/wall_outputs_images/identified_wall_faces_%d.pdf' % wall_number)
-        plt.show()
+    plt.savefig('images/wall_outputs_images/identified_wall_faces_%d.jpg' % wall_number, dpi=300)
+    plt.savefig('images/wall_outputs_images/identified_wall_faces_%d.pdf' % wall_number)
+    plt.savefig('images/wall_outputs_images/identified_wall_faces_%d.png' % wall_number, dpi=300)
 
     return y1, y2
 
@@ -1409,7 +1442,7 @@ def identify_openings(wall_number, wall_points, wall_label, resolution, grid_rou
                 plt.tight_layout()
                 plt.savefig('images/wall_outputs_images/wall_%d_openings.jpg' % wall_number, dpi=300)
                 plt.savefig('images/pdf/wall_%d_opening.pdf' % wall_number)
-                plt.show()
+                plt.savefig('images/pdf/wall_%d_opening.png' % wall_number, dpi=300)
             else:
                 pass
 
