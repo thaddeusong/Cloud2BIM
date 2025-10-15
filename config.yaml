@@ -1,8 +1,8 @@
 e57_input: true
 e57_files:
-  - input_e57/kladno_med.e57
+  - input_e57\GL_C29-30_BLK_357D_#01-126_LSVY2794_E57.e57
 xyz_files:
-  - input_xyz\kladno_med.xyz
+  - input_xyz\GL_C29-30_BLK_357D_#01-126_LSVY2794_E57.xyz
 dilute: false
 dilution_factor: 10
 exterior_scan: false
@@ -17,7 +17,7 @@ min_wall_thickness: 0.05
 max_wall_thickness: 0.75
 exterior_walls_thickness: 0.3
 
-output_ifc: output_IFC/output-1.ifc
+output_ifc: output_IFC/gl_c29.ifc
 ifc_project_name: Sample project
 ifc_project_long_name: Deconstruction of non-load-bearing elements
 ifc_project_version: version 1.0
